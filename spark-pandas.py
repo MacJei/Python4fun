@@ -52,6 +52,7 @@ class LTE_MAPPING(object):
         return int(band)
 
 class ALU_LTE_PANDAS(object):
+
     groupby = 'MARKET'
 
     def run(self, inputType, fileList, outDirectory):
@@ -110,6 +111,7 @@ class ALU_LTE_PANDAS(object):
         return difference
 
 class ALU_LTE_SPARK(object):
+
     groupby = 'MARKET'
 
     def printDfPartitions(self, rdddataframe):
@@ -196,23 +198,19 @@ class ALU_LTE_SPARK(object):
         return difference
 
 if __name__ == "__main__":
-    #intDirectory = os.path.join(os.path.dirname(__file__), '..', '..', 'TestAnalysis/output-alu-new/')
-    #outDirectory = os.path.join(os.path.dirname(__file__), '..', '..', 'TestAnalysis/Report/')
     intDirectory = os.path.join(os.path.dirname(__file__), 'sample-data/')
     outDirectory = os.path.join(os.path.dirname(__file__), 'report/')
-    # 2 type data loading: local, s3
-    inputType = "local"
-    inputType = "s3"
     s3bucket = "output-alu-new" # your s3bucket name
-    if inputType == 'local':
-        inputfiles = glob.glob(intDirectory + '*.csv')
-    if inputType == 's3':
-        # if you already update your local aws credentials by vi ~/.aws/credentials
-        # then you don't need to explicitly set the access_key, secret_key
-        #fs = s3fs.S3FileSystem(anon=False, key=access_key, secret=secret_key)
-        fs = s3fs.S3FileSystem(anon=False)
-        inputfiles = fs.ls(s3bucket)
+    s3Files = s3fs.S3FileSystem(anon=False).ls(s3bucket)
+    localFiles = glob.glob(intDirectory + '*.csv')
     #(1) run via pandas
-    print ALU_LTE_PANDAS().run(inputType, inputfiles, outDirectory)
+    print ALU_LTE_PANDAS().run("local", localFiles, outDirectory)
+    print ALU_LTE_PANDAS().run("s3", s3Files, outDirectory)
     #(2) run via spark
-    print ALU_LTE_SPARK().run(inputType, inputfiles, outDirectory)
+    print ALU_LTE_SPARK().run("local", localFiles, outDirectory)
+    print ALU_LTE_SPARK().run("s3", s3Files, outDirectory)
+
+    # if you already update your local aws credentials by vi ~/.aws/credentials
+    # then you don't need to explicitly set the access_key, secret_key
+    # otherwise, we have to set aws credentials at runtime
+    # fs = s3fs.S3FileSystem(anon=False, key=access_key, secret=secret_key)

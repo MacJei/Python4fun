@@ -1,11 +1,13 @@
 #submit this job
 #$SPARK_HOME/bin/spark-submit --master spark://ec2-34-208-33-205.us-west-2.compute.amazonaws.com:7077 --deploy-mode cluster --executor-memory 1g ALU-LTE.py
+#SPARK_HOME /Library/Python/2.7/site-packages/pyspark
+#python /usr/local/bin/find_spark_home.py will return $SPARK_HOME
+#download aws-java-sdk-1.7.4.jar hadoop-aws-2.7.2.jar and then place them into $SPARK_HOME
 import pandas as pds
 import datetime as dt
 import glob
 import os
 import s3fs
-import AWS_CONFIG
 from pyspark import SparkContext, SparkConf, sql
 
 class LTE_MAPPING(object):
@@ -49,30 +51,16 @@ class LTE_MAPPING(object):
         band = band[0:len(band) - 3]
         return int(band)
 
-
 class ALU_LTE_PANDAS(object):
-    currentDirectory = os.path.dirname(__file__)
-    #intDirectory = os.path.join(os.path.dirname(__file__), '..', '..', 'TestAnalysis/output-alu-new/')
-    #outDirectory = os.path.join(os.path.dirname(__file__), '..', '..', 'TestAnalysis/Report/')
-    intDirectory = os.path.join(os.path.dirname(__file__), 'sample-data/')
-    outDirectory = os.path.join(os.path.dirname(__file__), 'report/')
     groupby = 'MARKET'
-
-    def run(self, inputType, s3bucket, access_key, secret_key):
-        outputName = self.outDirectory + "network_capacity_trending_per_wk_" + self.groupby + "_ALU_2017_pandas_" + inputType + ".csv"
-        if not os.path.exists(self.outDirectory):
-            os.mkdir(self.outDirectory)
-        fileList = glob.glob(self.intDirectory + '*.csv')
-        if inputType == 's3':
-            fs = s3fs.S3FileSystem(anon=False, key=access_key, secret=secret_key)
-            fileList = fs.ls(s3bucket)
+    def run(self, inputType, fileList, outDirectory):
+        outputName = outDirectory + "result_group_by_" + self.groupby + "_ALU_2017_pandas_" + inputType + ".csv"
         start = dt.datetime.now()
-
         datalist = []
         for filename in fileList:
             if inputType == 's3':
-                filename = "s3://"+filename
-            print filename
+                filename = "s3a://"+filename
+            print "reading " + filename
             df = pds.read_csv(filename, index_col=False, usecols=[0, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
             date = LTE_MAPPING.x_date(filename[len(filename) - 12:len(filename) - 4])
             df['DATE'] = date
@@ -121,55 +109,19 @@ class ALU_LTE_PANDAS(object):
         return difference
 
 class ALU_LTE_SPARK(object):
-    currentDirectory = os.path.dirname(__file__)
-    #intDirectory = os.path.join(os.path.dirname(__file__), '..', '..', 'TestAnalysis/output-alu-new/')
-    #outDirectory = os.path.join(os.path.dirname(__file__), '..', '..', 'TestAnalysis/Report/')
-    intDirectory = os.path.join(os.path.dirname(__file__), 'sample-data/')
-    outDirectory = os.path.join(os.path.dirname(__file__), 'report/')
     groupby = 'MARKET'
-    dataframeoutput = None
 
     def printDfPartitions(self, rdddataframe):
         print "We have total " + str(rdddataframe.rdd.getNumPartitions()) + " partions!"
 
-    def getBandRDDandUnion(self, rdddataframe, option):
-        dataframe1 = rdddataframe.filter(rdddataframe['BAND'] == option).groupBy(['DATE', self.groupby]).sum()
-        dataframe1 = dataframe1.withColumn('UE Tput (kbps)', dataframe1['sum(EUCELL_DL_TPUT_NUM_KBITS)'] / dataframe1[
-            'sum(EUCELL_DL_TPUT_DEN_SECS)'])
-        dataframe1 = dataframe1.withColumn('DRB Tput (kbps)',
-                                           dataframe1['sum(EUCELL_DL_DRB_TPUT_NUM_KBITS)'] / dataframe1[
-                                               'sum(EUCELL_DL_DRB_TPUT_DEN_SECS)'])
-        dataframe1 = dataframe1.withColumn('Cell Spectral Efficiency (bps/Hz)',
-                                           8 * dataframe1['sum(DRBPDCPSDUKBYTESDL_NONGBR)'] / (
-                                               dataframe1['sum(DLPRBUSEDWITHDSPUC_FDUSERS)'] + dataframe1[
-                                                   'sum(DLPRBUSEDWITHDSPUC_FSUSERS)']) / 1.024 / 0.18)
-        dataframe1 = dataframe1.withColumn('BAND', sql.functions.lit(option))
-        dataframe1 = dataframe1.withColumn('VENDOR', sql.functions.lit('ALU'))
-        if self.dataframeoutput == None:
-            self.dataframeoutput = dataframe1
-        else:
-            self.dataframeoutput = self.dataframeoutput.union(dataframe1)
-        print option
-        return option
-        #return dataframe1
-    def run(self, inputType, s3bucket, access_key, secret_key):
+    def run(self, inputType, fileList, outDirectory):
         sparkConf = SparkConf().setAppName("ALU Application").setMaster("local[*]")\
             #.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
         sparkSession = sql.SparkSession \
             .builder \
             .config(conf=sparkConf) \
             .getOrCreate()
-        outputName = self.outDirectory + "network_capacity_trending_per_wk_" + self.groupby + "_ALU_2017_spark_" + inputType + ".csv"
-        if not os.path.exists(self.outDirectory):
-            os.mkdir(self.outDirectory)
-        fileList = glob.glob(self.intDirectory + '*.csv')
-        if inputType == 's3': #get fileList in S3
-            fs = s3fs.S3FileSystem(anon=False, key=access_key, secret=secret_key)
-            fileList = fs.ls(s3bucket)
-            #sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3n.awsAccessKeyId", access_key)
-            #sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3n.awsSecretAccessKey", secret_key)
-            sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.access.key", access_key)
-            sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.secret.key", secret_key)
+        outputName = outDirectory + "result_group_by_" + self.groupby + "_ALU_2017_spark_" + inputType + ".csv"
         start = dt.datetime.now()
 
         dataframe = None
@@ -178,7 +130,18 @@ class ALU_LTE_SPARK(object):
             if inputType == 's3':
                 #filename = "s3n://"+filename
                 filename = "s3a://" + filename
-            print date
+                #for spark, you can set aws credential via
+                #(1) export env for your spark cluster:
+                # export AWS_SECRET_ACCESS_KEY=XXXXXXXXXX
+                # export AWS_ACCESS_KEY_ID=XXXXXXXXXXXXXXXXXX
+                #(2) you can explicitly set credential at runtime:
+                # s3n works but it is very slow
+                # sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3n.awsAccessKeyId", access_key)
+                # sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3n.awsSecretAccessKey", secret_key)
+                # s3a is faster!
+                # sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.access.key", access_key)
+                # sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.secret.key", secret_key)
+            print "reading " + filename
             rddFrame1 = sparkSession.read.csv(filename,header=True)
             #ENODEB_CELLNAME	ENODEB	DATA_DATE	MARKET_CLUSTER	VERSION	REGION	MARKET	DL_CH_BANDWIDTH	EARFCN_DL	DRBPDCPSDUKBYTESDL_NONGBR	DLPRBUSEDWITHDSPUC_FDUSERS	DLPRBUSEDWITHDSPUC_FSUSERS	EUCELL_DL_TPUT_NUM_KBITS	EUCELL_DL_TPUT_DEN_SECS	EUCELL_DL_DRB_TPUT_NUM_KBITS	EUCELL_DL_DRB_TPUT_DEN_SECS
             #rddFrame1 = rddFrame1.drop('ENODEB','DATA_DATE','VERSION').dropna()
@@ -208,40 +171,51 @@ class ALU_LTE_SPARK(object):
 
         #dataframe.cache()
 
-        self.dataframeoutput = dataframe.groupBy(['DATE', self.groupby, 'BAND']).sum()
-        self.dataframeoutput = self.dataframeoutput.withColumn('UE Tput (kbps)', self.dataframeoutput['sum(EUCELL_DL_TPUT_NUM_KBITS)'] / self.dataframeoutput['sum(EUCELL_DL_TPUT_DEN_SECS)'])
-        self.dataframeoutput = self.dataframeoutput.withColumn('DRB Tput (kbps)', self.dataframeoutput['sum(EUCELL_DL_DRB_TPUT_NUM_KBITS)'] / self.dataframeoutput['sum(EUCELL_DL_DRB_TPUT_DEN_SECS)'])
-        self.dataframeoutput = self.dataframeoutput.withColumn('Cell Spectral Efficiency (bps/Hz)', 8 * self.dataframeoutput['sum(DRBPDCPSDUKBYTESDL_NONGBR)'] / (
-            self.dataframeoutput['sum(DLPRBUSEDWITHDSPUC_FDUSERS)'] + self.dataframeoutput['sum(DLPRBUSEDWITHDSPUC_FSUSERS)']) / 1.024 / 0.18)
-        self.dataframeoutput = self.dataframeoutput.withColumn('VENDOR', sql.functions.lit('ALU'))
-        self.dataframeoutput = self.dataframeoutput.withColumn('UE Traffic (kbytes)', self.dataframeoutput['sum(EUCELL_DL_TPUT_NUM_KBITS)'] / 8)
-        self.dataframeoutput = self.dataframeoutput.withColumn('Cell Used PRB', (self.dataframeoutput['sum(DLPRBUSEDWITHDSPUC_FDUSERS)'] + self.dataframeoutput[
+        dataframeoutput = dataframe.groupBy(['DATE', self.groupby, 'BAND']).sum()
+        dataframeoutput = dataframeoutput.withColumn('UE Tput (kbps)', dataframeoutput['sum(EUCELL_DL_TPUT_NUM_KBITS)'] / dataframeoutput['sum(EUCELL_DL_TPUT_DEN_SECS)'])
+        dataframeoutput = dataframeoutput.withColumn('DRB Tput (kbps)', dataframeoutput['sum(EUCELL_DL_DRB_TPUT_NUM_KBITS)'] / dataframeoutput['sum(EUCELL_DL_DRB_TPUT_DEN_SECS)'])
+        dataframeoutput = dataframeoutput.withColumn('Cell Spectral Efficiency (bps/Hz)', 8 * dataframeoutput['sum(DRBPDCPSDUKBYTESDL_NONGBR)'] / (
+            dataframeoutput['sum(DLPRBUSEDWITHDSPUC_FDUSERS)'] + dataframeoutput['sum(DLPRBUSEDWITHDSPUC_FSUSERS)']) / 1.024 / 0.18)
+        dataframeoutput = dataframeoutput.withColumn('VENDOR', sql.functions.lit('ALU'))
+        dataframeoutput = dataframeoutput.withColumn('UE Traffic (kbytes)', dataframeoutput['sum(EUCELL_DL_TPUT_NUM_KBITS)'] / 8)
+        dataframeoutput = dataframeoutput.withColumn('Cell Used PRB', (dataframeoutput['sum(DLPRBUSEDWITHDSPUC_FDUSERS)'] + dataframeoutput[
             'sum(DLPRBUSEDWITHDSPUC_FSUSERS)']) * 1.024)
         #rename colname
-        self.dataframeoutput = self.dataframeoutput.withColumnRenamed("sum(DRBPDCPSDUKBYTESDL_NONGBR)", "Cell Traffic (kbytes)")
-        self.dataframeoutput = self.dataframeoutput.withColumnRenamed("sum(EUCELL_DL_TPUT_DEN_SECS)", "UE Active Time (s)")
-        self.dataframeoutput = self.dataframeoutput.withColumnRenamed("sum(Total cell count)", "Total cell count")
-        self.dataframeoutput = self.dataframeoutput.withColumnRenamed("sum(Total Spectrum in MHz)", "Total Spectrum in MHz")
+        dataframeoutput = dataframeoutput.withColumnRenamed("sum(DRBPDCPSDUKBYTESDL_NONGBR)", "Cell Traffic (kbytes)")
+        dataframeoutput = dataframeoutput.withColumnRenamed("sum(EUCELL_DL_TPUT_DEN_SECS)", "UE Active Time (s)")
+        dataframeoutput = dataframeoutput.withColumnRenamed("sum(Total cell count)", "Total cell count")
+        dataframeoutput = dataframeoutput.withColumnRenamed("sum(Total Spectrum in MHz)", "Total Spectrum in MHz")
         #dataframeoutput = dataframeoutput.drop('sum(EUCELL_DL_TPUT_NUM_KBITS)').drop('sum(DLPRBUSEDWITHDSPUC_FDUSERS)').drop('sum(DLPRBUSEDWITHDSPUC_FSUSERS)').drop('sum(EUCELL_DL_DRB_TPUT_NUM_KBITS)').drop('sum(EUCELL_DL_DRB_TPUT_DEN_SECS)')
-        self.dataframeoutput = self.dataframeoutput.select('DATE','MARKET','VENDOR','BAND','Cell Traffic (kbytes)', 'Cell Used PRB', 'Cell Spectral Efficiency (bps/Hz)',
+        dataframeoutput = dataframeoutput.select('DATE','MARKET','VENDOR','BAND','Cell Traffic (kbytes)', 'Cell Used PRB', 'Cell Spectral Efficiency (bps/Hz)',
                                                  'UE Traffic (kbytes)', 'UE Active Time (s)',
                                                  'UE Tput (kbps)', 'Total cell count', 'Total Spectrum in MHz')
-        self.dataframeoutput = self.dataframeoutput.coalesce(1)
+        dataframeoutput = dataframeoutput.coalesce(1)
         #take action here
-        self.dataframeoutput.write.csv(outputName, header=True)
+        dataframeoutput.write.csv(outputName, header=True)
         difference = dt.datetime.now() - start
-        self.dataframeoutput.unpersist()
+        dataframeoutput.unpersist()
         sparkSession.stop()
         print 'Ok'
         return difference
 
 
 if __name__ == "__main__":
+    #intDirectory = os.path.join(os.path.dirname(__file__), '..', '..', 'TestAnalysis/output-alu-new/')
+    #outDirectory = os.path.join(os.path.dirname(__file__), '..', '..', 'TestAnalysis/Report/')
+    intDirectory = os.path.join(os.path.dirname(__file__), 'sample-data/')
+    outDirectory = os.path.join(os.path.dirname(__file__), 'report/')
     inputType = "local"
     inputType = "s3"
-    #pls change your config
-    access_key = AWS_CONFIG.ACCESS_KEY()
-    secret_key = AWS_CONFIG.SECRET_KEY()
-    s3bucket = AWS_CONFIG.S3_BUCKET()
-    print ALU_LTE_PANDAS().run(inputType, s3bucket, access_key, secret_key)
-    #print ALU_LTE_SPARK().run(inputType, s3bucket, access_key, secret_key)
+    #access_key = "XXXXXXX"
+    #secret_key = "XXXXXXXXXX"
+    s3bucket = "output-alu-new" # your s3bucket name
+    if inputType == 'local':
+        inputfiles = glob.glob(intDirectory + '*.csv')
+    if inputType == 's3':
+        # if you already update your local aws credentials by vi ~/.aws/credentials
+        # then you don't need to explicitly set the access_key, secret_key
+        #fs = s3fs.S3FileSystem(anon=False, key=access_key, secret=secret_key)
+        fs = s3fs.S3FileSystem(anon=False)
+        inputfiles = fs.ls(s3bucket)
+    #print ALU_LTE_PANDAS().run(inputType, inputfiles, outDirectory)
+    print ALU_LTE_SPARK().run(inputType, inputfiles, outDirectory)

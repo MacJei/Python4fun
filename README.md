@@ -1,2 +1,2 @@
 # spark-pandas-s3
-some batch processing demos
+Spark & Pandas batch processing demo, data will be loaded from local & AWS s3

@@ -239,8 +239,8 @@ class ALU_LTE_SPARK(object):
 
 
 if __name__ == "__main__":
-    inputType = "local"
-    #inputType = "s3"
+    #inputType = "local"
+    inputType = "s3"
     s3bucket = "output-alu-new"
     #print ALU_LTE_PANDAS().run(inputType, s3bucket)
     print ALU_LTE_SPARK().run(inputType, s3bucket)

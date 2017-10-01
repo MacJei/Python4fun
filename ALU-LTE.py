@@ -128,13 +128,12 @@ class ALU_LTE_SPARK(object):
         for filename in fileList:
             date = LTE_MAPPING.x_date(filename[len(filename) - 12:len(filename) - 4])
             if inputType == 's3':
-                #filename = "s3n://"+filename
                 filename = "s3a://" + filename
-                #for spark, you can set aws credential via
-                #(1) export env for your spark cluster:
+                # for spark, you can set aws credential via
+                # (1) export env for your spark cluster:
                 # export AWS_SECRET_ACCESS_KEY=XXXXXXXXXX
                 # export AWS_ACCESS_KEY_ID=XXXXXXXXXXXXXXXXXX
-                #(2) you can explicitly set credential at runtime:
+                # (2) or you can explicitly set credential at runtime:
                 # s3n works but it is very slow
                 # sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3n.awsAccessKeyId", access_key)
                 # sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3n.awsSecretAccessKey", secret_key)
@@ -169,8 +168,6 @@ class ALU_LTE_SPARK(object):
         BandWidthMapping = sql.functions.udf(lambda x: LTE_MAPPING.bandwidth(x), sql.types.IntegerType())
         dataframe = dataframe.withColumn('Total Spectrum in MHz', BandWidthMapping('DL_CH_BANDWIDTH'))
 
-        #dataframe.cache()
-
         dataframeoutput = dataframe.groupBy(['DATE', self.groupby, 'BAND']).sum()
         dataframeoutput = dataframeoutput.withColumn('UE Tput (kbps)', dataframeoutput['sum(EUCELL_DL_TPUT_NUM_KBITS)'] / dataframeoutput['sum(EUCELL_DL_TPUT_DEN_SECS)'])
         dataframeoutput = dataframeoutput.withColumn('DRB Tput (kbps)', dataframeoutput['sum(EUCELL_DL_DRB_TPUT_NUM_KBITS)'] / dataframeoutput['sum(EUCELL_DL_DRB_TPUT_DEN_SECS)'])
@@ -197,7 +194,6 @@ class ALU_LTE_SPARK(object):
         sparkSession.stop()
         print 'Ok'
         return difference
-
 
 if __name__ == "__main__":
     #intDirectory = os.path.join(os.path.dirname(__file__), '..', '..', 'TestAnalysis/output-alu-new/')

@@ -5,6 +5,7 @@ import datetime as dt
 import glob
 import os
 import s3fs
+import AWS_CONFIG
 from pyspark import SparkContext, SparkConf, sql
 
 class LTE_MAPPING(object):
@@ -57,15 +58,13 @@ class ALU_LTE_PANDAS(object):
     outDirectory = os.path.join(os.path.dirname(__file__), 'report/')
     groupby = 'MARKET'
 
-    def run(self, inputType, s3bucket):
+    def run(self, inputType, s3bucket, access_key, secret_key):
         outputName = self.outDirectory + "network_capacity_trending_per_wk_" + self.groupby + "_ALU_2017_pandas_" + inputType + ".csv"
         if not os.path.exists(self.outDirectory):
             os.mkdir(self.outDirectory)
         fileList = glob.glob(self.intDirectory + '*.csv')
         if inputType == 's3':
-            fs = s3fs.S3FileSystem(anon=False,
-                                   key='AKIAI6B4YJZUYKPRSF3Q',
-                                   secret='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')
+            fs = s3fs.S3FileSystem(anon=False, key=access_key, secret=secret_key)
             fileList = fs.ls(s3bucket)
         start = dt.datetime.now()
 
@@ -73,6 +72,7 @@ class ALU_LTE_PANDAS(object):
         for filename in fileList:
             if inputType == 's3':
                 filename = "s3://"+filename
+            print filename
             df = pds.read_csv(filename, index_col=False, usecols=[0, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
             date = LTE_MAPPING.x_date(filename[len(filename) - 12:len(filename) - 4])
             df['DATE'] = date
@@ -152,7 +152,7 @@ class ALU_LTE_SPARK(object):
         print option
         return option
         #return dataframe1
-    def run(self, inputType, s3bucket):
+    def run(self, inputType, s3bucket, access_key, secret_key):
         sparkConf = SparkConf().setAppName("ALU Application").setMaster("local[*]")\
             #.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
         sparkSession = sql.SparkSession \
@@ -164,14 +164,12 @@ class ALU_LTE_SPARK(object):
             os.mkdir(self.outDirectory)
         fileList = glob.glob(self.intDirectory + '*.csv')
         if inputType == 's3': #get fileList in S3
-            fs = s3fs.S3FileSystem(anon=False,
-                                   key='AKIAI6B4YJZUYKPRSF3Q',
-                                   secret='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')
+            fs = s3fs.S3FileSystem(anon=False, key=access_key, secret=secret_key)
             fileList = fs.ls(s3bucket)
-            #sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3n.awsAccessKeyId", "AKIAI6B4YJZUYKPRSF3Q")
-            #sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3n.awsSecretAccessKey", "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")
-            sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.access.key", "AKIAI6B4YJZUYKPRSF3Q")
-            sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.secret.key", "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")
+            #sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3n.awsAccessKeyId", access_key)
+            #sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3n.awsSecretAccessKey", secret_key)
+            sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.access.key", access_key)
+            sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.secret.key", secret_key)
         start = dt.datetime.now()
 
         dataframe = None
@@ -239,8 +237,11 @@ class ALU_LTE_SPARK(object):
 
 
 if __name__ == "__main__":
-    #inputType = "local"
+    inputType = "local"
     inputType = "s3"
-    s3bucket = "output-alu-new"
-    #print ALU_LTE_PANDAS().run(inputType, s3bucket)
-    print ALU_LTE_SPARK().run(inputType, s3bucket)
+    #pls change your config
+    access_key = AWS_CONFIG.ACCESS_KEY()
+    secret_key = AWS_CONFIG.SECRET_KEY()
+    s3bucket = AWS_CONFIG.S3_BUCKET()
+    print ALU_LTE_PANDAS().run(inputType, s3bucket, access_key, secret_key)
+    #print ALU_LTE_SPARK().run(inputType, s3bucket, access_key, secret_key)

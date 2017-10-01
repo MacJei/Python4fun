@@ -1,5 +1,5 @@
 #submit this job
-#$SPARK_HOME/bin/spark-submit --master spark://ec2-34-208-33-205.us-west-2.compute.amazonaws.com:7077 --deploy-mode cluster --executor-memory 1g ALU-LTE.py
+#$SPARK_HOME/bin/spark-submit --master spark://ec2-34-208-33-205.us-west-2.compute.amazonaws.com:7077 --deploy-mode cluster --executor-memory 1g spark-pandas.py
 #SPARK_HOME /Library/Python/2.7/site-packages/pyspark
 #python /usr/local/bin/find_spark_home.py will return $SPARK_HOME
 #download aws-java-sdk-1.7.4.jar hadoop-aws-2.7.2.jar and then place them into $SPARK_HOME
@@ -53,6 +53,7 @@ class LTE_MAPPING(object):
 
 class ALU_LTE_PANDAS(object):
     groupby = 'MARKET'
+
     def run(self, inputType, fileList, outDirectory):
         outputName = outDirectory + "result_group_by_" + self.groupby + "_ALU_2017_pandas_" + inputType + ".csv"
         start = dt.datetime.now()
@@ -123,7 +124,6 @@ class ALU_LTE_SPARK(object):
             .getOrCreate()
         outputName = outDirectory + "result_group_by_" + self.groupby + "_ALU_2017_spark_" + inputType + ".csv"
         start = dt.datetime.now()
-
         dataframe = None
         for filename in fileList:
             date = LTE_MAPPING.x_date(filename[len(filename) - 12:len(filename) - 4])
@@ -201,7 +201,7 @@ if __name__ == "__main__":
     intDirectory = os.path.join(os.path.dirname(__file__), 'sample-data/')
     outDirectory = os.path.join(os.path.dirname(__file__), 'report/')
     # 2 type data loading: local, s3
-    #inputType = "local"
+    inputType = "local"
     inputType = "s3"
     s3bucket = "output-alu-new" # your s3bucket name
     if inputType == 'local':

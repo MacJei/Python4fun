@@ -1,13 +1,17 @@
 #submit this job
 #$SPARK_HOME/bin/spark-submit --master spark://ec2-34-208-33-205.us-west-2.compute.amazonaws.com:7077 --deploy-mode cluster --executor-memory 1g spark-pandas.py
+
+#for local test if you only install pyspark:
+#first find your $SPARK_HOME
 #SPARK_HOME /Library/Python/2.7/site-packages/pyspark
 #python /usr/local/bin/find_spark_home.py will return $SPARK_HOME
-#download aws-java-sdk-1.7.4.jar hadoop-aws-2.7.2.jar and then place them into $SPARK_HOME
+
 import pandas as pds
 import datetime as dt
 import glob
 import os
 import s3fs
+import hdfs
 from pyspark import SparkContext, SparkConf, sql
 
 class LTE_MAPPING(object):
@@ -73,7 +77,6 @@ class ALU_LTE_PANDAS(object):
         dataframe['TOTALCELLS'] = 1
         dataframe['BAND'] = dataframe['EARFCN_DL'].map(lambda x: LTE_MAPPING.EARFCN_DL_mapping(x))
         dataframe['TOTALSPECTRUM'] = dataframe['DL_CH_BANDWIDTH'].map(lambda x: LTE_MAPPING.bandwidth(x))
-
         dataframe_list = []
         bandlist = [700, 850, 1900, 2100, 2300, 'AWS']
         for option in bandlist:
@@ -118,8 +121,7 @@ class ALU_LTE_SPARK(object):
         print "We have total " + str(rdddataframe.rdd.getNumPartitions()) + " partions!"
 
     def run(self, inputType, fileList, outDirectory):
-        sparkConf = SparkConf().setAppName("ALU Application").setMaster("local[*]")\
-            #.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+        sparkConf = SparkConf().setAppName("ALU Application").setMaster("local[*]")
         sparkSession = sql.SparkSession \
             .builder \
             .config(conf=sparkConf) \
@@ -127,8 +129,11 @@ class ALU_LTE_SPARK(object):
         outputName = outDirectory + "result_group_by_" + self.groupby + "_ALU_2017_spark_" + inputType + ".csv"
         start = dt.datetime.now()
         dataframe = None
+
         for filename in fileList:
             date = LTE_MAPPING.x_date(filename[len(filename) - 12:len(filename) - 4])
+            if inputType == 'hdfs':
+                filename = "hdfs://hdfs2:8020/user/ec2-user/sample-data/" + filename
             if inputType == 's3':
                 filename = "s3a://" + filename
                 # for spark, you can set aws credential via
@@ -203,12 +208,14 @@ if __name__ == "__main__":
     s3bucket = "output-alu-new" # your s3bucket name
     s3Files = s3fs.S3FileSystem(anon=False).ls(s3bucket)
     localFiles = glob.glob(intDirectory + '*.csv')
+    hdfsFiles = hdfs.Client('http://hdfs2:50070').list('/user/ec2-user/sample-data') # Use namenode public ip http://namenode:50070
     #(1) run via pandas
     print ALU_LTE_PANDAS().run("local", localFiles, outDirectory)
     print ALU_LTE_PANDAS().run("s3", s3Files, outDirectory)
     #(2) run via spark
     print ALU_LTE_SPARK().run("local", localFiles, outDirectory)
     print ALU_LTE_SPARK().run("s3", s3Files, outDirectory)
+    print ALU_LTE_SPARK().run("hdfs", hdfsFiles, outDirectory)
 
     # if you already update your local aws credentials by vi ~/.aws/credentials
     # then you don't need to explicitly set the access_key, secret_key

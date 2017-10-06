@@ -57,15 +57,16 @@ class ALU_LTE_PANDAS(object):
         outputName = outDirectory + "result_group_by_" + self.groupby + "_ALU_2017_pandas_" + inputType + ".csv"
         start = dt.datetime.now()
         datalist = []
+        print 'Pandas starts reading ' + inputType + ' data source:'
         for filename in fileList:
             if inputType == 's3':
                 filename = "s3a://"+filename
-            print "reading " + filename
+            print "Reading " + filename
             df = pds.read_csv(filename, index_col=False, usecols=[0, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
             date = LTE_MAPPING.x_date(filename[len(filename) - 12:len(filename) - 4])
             df['DATE'] = date
             datalist.append(df)
-        print "reading finished!"
+        print "Reading finished, starts our data analysis!"
         dataframe = pds.concat(datalist, ignore_index=True)
         dataframe = dataframe.dropna(axis=0)
         dataframe['TOTALCELLS'] = 1
@@ -96,6 +97,7 @@ class ALU_LTE_PANDAS(object):
         dataframeoutput['UE Traffic (kbytes)'] = dataframeoutput['EUCELL_DL_TPUT_NUM_KBITS'] / 8
         dataframeoutput['Cell Used PRB'] = (dataframeoutput['DLPRBUSEDWITHDSPUC_FDUSERS'] + dataframeoutput[
             'DLPRBUSEDWITHDSPUC_FSUSERS']) * 1.024
+        print "Writing output!"
         dataframeoutput.to_csv(outputName,
                                columns=['VENDOR', 'BAND', 'DRBPDCPSDUKBYTESDL_NONGBR', 'Cell Used PRB', 'Ave_SE',
                                         'UE Traffic (kbytes)', 'EUCELL_DL_TPUT_DEN_SECS', 'Ave_UE_Tput', 'TOTALCELLS',
@@ -104,7 +106,7 @@ class ALU_LTE_PANDAS(object):
                                        'Cell Spectral Efficiency (bps/Hz)', 'UE Traffic (kbytes)', 'UE Active Time (s)',
                                        'UE Tput (kbps)', 'Total cell count', 'Total Spectrum in MHz'])
         difference = dt.datetime.now() - start
-        print 'Ok'
+        print 'Done, total running time for ' + inputType + ' data source is :'
         return difference
 
 class ALU_LTE_SPARK(object):
@@ -123,7 +125,7 @@ class ALU_LTE_SPARK(object):
         outputName = outDirectory + "result_group_by_" + self.groupby + "_ALU_2017_spark_" + inputType + ".csv"
         start = dt.datetime.now()
         dataframe = None
-
+        print 'Spark starts reading ' + inputType + ' data source:'
         for filename in fileList:
             date = LTE_MAPPING.x_date(filename[len(filename) - 12:len(filename) - 4])
             if inputType == 'hdfs':
@@ -154,7 +156,7 @@ class ALU_LTE_SPARK(object):
                 dataframe = rddFrame1
             else:
                 dataframe = dataframe.union(rddFrame1)
-        print "Reading finished!"
+        print "Reading finished, starts our data analysis!"
         self.printDfPartitions(dataframe)
 
         #cast Type
@@ -197,7 +199,7 @@ class ALU_LTE_SPARK(object):
         difference = dt.datetime.now() - start
         dataframeoutput.unpersist()
         sparkSession.stop()
-        print 'Done'
+        print 'Done, total running time for ' + inputType +' data source is :'
         return difference
 
 if __name__ == "__main__":

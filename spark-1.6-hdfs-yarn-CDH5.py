@@ -127,7 +127,7 @@ if __name__ == "__main__":
     exit()
 
 #Submit job to yarn on top of the hdfs cluster
-#spark-submit --master yarn --deploy-mode cluster --executor-memory 1g --packages com.databricks:spark-csv_2.10:1.5.0 spark-CDH5-1.6-hdfs-yarn.py
+#spark-submit --master yarn --deploy-mode cluster --executor-memory 1g --packages com.databricks:spark-csv_2.10:1.5.0 spark-1.6-hdfs-yarn-CDH5.py
 
 #For hdfs, pls find output file at:
 #hdfs://user/ec2-user/report/result_group_by_MARKET_ALU_2017_spark_hdfs.csv

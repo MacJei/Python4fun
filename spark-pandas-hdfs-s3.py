@@ -1,10 +1,4 @@
-#submit this job
-#$SPARK_HOME/bin/spark-submit --master spark://ec2-34-208-33-205.us-west-2.compute.amazonaws.com:7077 --deploy-mode cluster --executor-memory 1g spark-pandas.py
-
-#for local test if you only install pyspark:
-#first find your $SPARK_HOME
-#SPARK_HOME /Library/Python/2.7/site-packages/pyspark
-#python /usr/local/bin/find_spark_home.py will return $SPARK_HOME
+#pyspark 2.2
 
 import pandas as pds
 import datetime as dt
@@ -216,8 +210,11 @@ if __name__ == "__main__":
     print ALU_LTE_SPARK().run("local", localFiles, outDirectory)
     print ALU_LTE_SPARK().run("s3", s3Files, outDirectory)
     print ALU_LTE_SPARK().run("hdfs", hdfsFiles, outDirectory)
-
+    exit()
     # if you already update your local aws credentials by vi ~/.aws/credentials
     # then you don't need to explicitly set the access_key, secret_key
     # otherwise, we have to set aws credentials at runtime
     # fs = s3fs.S3FileSystem(anon=False, key=access_key, secret=secret_key)
+
+#spark stand-alone deploy
+#$SPARK_HOME/bin/spark-submit --master spark://ec2-34-208-33-205.us-west-2.compute.amazonaws.com:7077 --deploy-mode cluster --executor-memory 1g spark-pandas-hdfs-s3.py

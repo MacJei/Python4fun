@@ -12,3 +12,8 @@ Quickstart
 (2) deploy to the spark cluster, by doing this you are expected to first command out the pandas part
 
     $SPARK_HOME/bin/spark-submit --master spark://ec2-34-208-33-205.us-west-2.compute.amazonaws.com:7077 --deploy-mode cluster --executor-memory 1g spark-pandas-hdfs-s3.py
+
+
+(2) Submit job to yarn on top of your hdfs cluster, if you already have one:)
+
+    $spark-submit --master yarn --deploy-mode cluster --executor-memory 1g --packages com.databricks:spark-csv_2.10:1.5.0 spark-CDH5-1.6-hdfs-yarn.py

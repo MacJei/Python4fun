@@ -17,7 +17,8 @@ Quickstart
 (2) Submit job to yarn on top of your hdfs cluster, if you already have one:)
 
     $spark-submit --master yarn --deploy-mode cluster --executor-memory 1g --packages com.databricks:spark-csv_2.10:1.5.0 spark-CDH5-1.6-hdfs-yarn.py
-----------
+
+
 The logs you may want to expect in your local testing:
 
 ![img](https://s3-us-west-2.amazonaws.com/github-photo-links/Screen+Shot+2017-10-06+at+2.35.06+PM.png)

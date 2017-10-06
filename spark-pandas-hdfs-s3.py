@@ -127,7 +127,10 @@ class ALU_LTE_SPARK(object):
         for filename in fileList:
             date = LTE_MAPPING.x_date(filename[len(filename) - 12:len(filename) - 4])
             if inputType == 'hdfs':
-                filename = "hdfs://hdfs2:8020/user/ec2-user/sample-data/" + filename
+                filename = "hdfs://hdfs1:8020/user/ec2-user/sample-data/" + filename
+                #The following setup is important if you are running this program in your local desktop
+                #Pls first set up DNS in local environment's /etc/hosts
+                sparkSession.sparkContext._jsc.hadoopConfiguration().set("dfs.client.use.datanode.hostname", "true")
             if inputType == 's3':
                 filename = "s3a://" + filename
                 # for spark, you can set aws credential via
@@ -141,7 +144,7 @@ class ALU_LTE_SPARK(object):
                 # s3a is faster!
                 # sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.access.key", access_key)
                 # sparkSession.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.secret.key", secret_key)
-            print "reading " + filename
+            print "Reading " + filename
             rddFrame1 = sparkSession.read.csv(filename,header=True)
             #ENODEB_CELLNAME	ENODEB	DATA_DATE	MARKET_CLUSTER	VERSION	REGION	MARKET	DL_CH_BANDWIDTH	EARFCN_DL	DRBPDCPSDUKBYTESDL_NONGBR	DLPRBUSEDWITHDSPUC_FDUSERS	DLPRBUSEDWITHDSPUC_FSUSERS	EUCELL_DL_TPUT_NUM_KBITS	EUCELL_DL_TPUT_DEN_SECS	EUCELL_DL_DRB_TPUT_NUM_KBITS	EUCELL_DL_DRB_TPUT_DEN_SECS
             #rddFrame1 = rddFrame1.drop('ENODEB','DATA_DATE','VERSION').dropna()
@@ -151,7 +154,7 @@ class ALU_LTE_SPARK(object):
                 dataframe = rddFrame1
             else:
                 dataframe = dataframe.union(rddFrame1)
-        print "reading finished!"
+        print "Reading finished!"
         self.printDfPartitions(dataframe)
 
         #cast Type
@@ -189,11 +192,12 @@ class ALU_LTE_SPARK(object):
                                                  'UE Tput (kbps)', 'Total cell count', 'Total Spectrum in MHz')
         dataframeoutput = dataframeoutput.coalesce(1)
         #take action here
+        print "Writing output!"
         dataframeoutput.write.csv(outputName, header=True)
         difference = dt.datetime.now() - start
         dataframeoutput.unpersist()
         sparkSession.stop()
-        print 'Ok'
+        print 'Done'
         return difference
 
 if __name__ == "__main__":
@@ -202,7 +206,8 @@ if __name__ == "__main__":
     s3bucket = "output-alu-new" # your s3bucket name
     s3Files = s3fs.S3FileSystem(anon=False).ls(s3bucket)
     localFiles = glob.glob(intDirectory + '*.csv')
-    hdfsFiles = hdfs.Client('http://hdfs2:50070').list('/user/ec2-user/sample-data') # Use namenode public ip http://namenode:50070
+    # Pls first set up DNS in local environment's /etc/hosts     XXX.XXX.XXX hdfs1
+    hdfsFiles = hdfs.Client('http://hdfs1:50070').list('/user/ec2-user/sample-data') # Use namenode public ip http://namenode:50070
     #(1) run via pandas
     print ALU_LTE_PANDAS().run("local", localFiles, outDirectory)
     print ALU_LTE_PANDAS().run("s3", s3Files, outDirectory)
@@ -216,5 +221,9 @@ if __name__ == "__main__":
     # otherwise, we have to set aws credentials at runtime
     # fs = s3fs.S3FileSystem(anon=False, key=access_key, secret=secret_key)
 
-#spark stand-alone deploy
+#python spark-pandas-hdfs-s3.py
+
+#or
+
+#spark-submit to your spark stand-alone cluster
 #$SPARK_HOME/bin/spark-submit --master spark://ec2-34-208-33-205.us-west-2.compute.amazonaws.com:7077 --deploy-mode cluster --executor-memory 1g spark-pandas-hdfs-s3.py

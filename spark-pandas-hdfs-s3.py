@@ -228,4 +228,4 @@ if __name__ == "__main__":
 #or
 
 #spark-submit to your spark stand-alone cluster
-#$SPARK_HOME/bin/spark-submit --master spark://ec2-34-208-33-205.us-west-2.compute.amazonaws.com:7077 --deploy-mode cluster --executor-memory 1g spark-pandas-hdfs-s3.py
+#$SPARK_HOME/bin/spark-submit --master spark://node1:7077 --deploy-mode cluster --executor-memory 1g spark-pandas-hdfs-s3.py

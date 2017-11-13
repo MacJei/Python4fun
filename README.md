@@ -9,7 +9,7 @@ Quickstart
     python spark-pandas-hdfs-s3.py
     
 
-(2) Subimit job to your spark stand-alone cluster
+(2) Subimit job to your spark stand-alone cluster, if you already have one:)
 
     $SPARK_HOME/bin/spark-submit --master spark://node1:7077 --deploy-mode cluster --executor-memory 1g spark-pandas-hdfs-s3.py
 

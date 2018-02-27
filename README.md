@@ -1,4 +1,4 @@
-# spark-pandas-s3
+# Python4fun
 Spark & Pandas batch processing demo, data will be loaded from local, remote s3 and HDFS.
 
 Quickstart

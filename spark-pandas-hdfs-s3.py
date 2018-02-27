@@ -6,6 +6,11 @@ import glob
 import os
 import s3fs
 import hdfs
+import logging
+logging.basicConfig()
+logger = logging.getLogger('spark-pandas-hdfs-s3')
+logger.setLevel(logging.DEBUG)
+import atexit
 from pyspark import SparkContext, SparkConf, sql
 
 class LTE_MAPPING(object):
@@ -114,7 +119,7 @@ class ALU_LTE_SPARK(object):
     groupby = 'MARKET'
 
     def printDfPartitions(self, rdddataframe):
-        print "We have total " + str(rdddataframe.rdd.getNumPartitions()) + " partions!"
+        print "We have total " + str(rdddataframe.rdd.getNumPartitions()) + " partions in this stage!"
 
     def run(self, inputType, fileList, outDirectory):
         sparkConf = SparkConf().setAppName("ALU Application").setMaster("local[*]")
@@ -156,7 +161,7 @@ class ALU_LTE_SPARK(object):
                 dataframe = rddFrame1
             else:
                 dataframe = dataframe.union(rddFrame1)
-        print "Reading finished, starts our data analysis!"
+        print "Reading stage finished, starts our data analysis!"
         self.printDfPartitions(dataframe)
 
         #cast Type
@@ -174,7 +179,15 @@ class ALU_LTE_SPARK(object):
         BandWidthMapping = sql.functions.udf(lambda x: LTE_MAPPING.bandwidth(x), sql.types.IntegerType())
         dataframe = dataframe.withColumn('Total Spectrum in MHz', BandWidthMapping('DL_CH_BANDWIDTH'))
 
-        dataframeoutput = dataframe.groupBy(['DATE', self.groupby, 'BAND']).sum()
+        print "Analysis stage 1 finished, starts grouping & aggregate data!"
+        dataframegroup = dataframe.groupBy(['DATE', self.groupby, 'BAND'])
+        dataframeoutput = dataframegroup.sum()
+        # Here 24 partitions>>>>>>200partitions,
+        # which means every child partition depends on a portion of each parent partitions
+        # so we have wide dependency here
+        # which implies that a new stage begin
+        self.printDfPartitions(dataframeoutput)
+
         dataframeoutput = dataframeoutput.withColumn('UE Tput (kbps)', dataframeoutput['sum(EUCELL_DL_TPUT_NUM_KBITS)'] / dataframeoutput['sum(EUCELL_DL_TPUT_DEN_SECS)'])
         dataframeoutput = dataframeoutput.withColumn('DRB Tput (kbps)', dataframeoutput['sum(EUCELL_DL_DRB_TPUT_NUM_KBITS)'] / dataframeoutput['sum(EUCELL_DL_DRB_TPUT_DEN_SECS)'])
         dataframeoutput = dataframeoutput.withColumn('Cell Spectral Efficiency (bps/Hz)', 8 * dataframeoutput['sum(DRBPDCPSDUKBYTESDL_NONGBR)'] / (
@@ -192,14 +205,21 @@ class ALU_LTE_SPARK(object):
         dataframeoutput = dataframeoutput.select('DATE','MARKET','VENDOR','BAND','Cell Traffic (kbytes)', 'Cell Used PRB', 'Cell Spectral Efficiency (bps/Hz)',
                                                  'UE Traffic (kbytes)', 'UE Active Time (s)',
                                                  'UE Tput (kbps)', 'Total cell count', 'Total Spectrum in MHz')
+        # Here 200 partitions>>>>>>1 partition,
+        # which means the child partition depends on entire parent partitions
+        # so we have narrow dependency here
+        # which implies no new stage begin
         dataframeoutput = dataframeoutput.coalesce(1)
+        self.printDfPartitions(dataframeoutput)
         #take action here
-        print "Writing output!"
+        print "Analysis stage 2 finished, starts writing output!"
         dataframeoutput.write.csv(outputName, header=True)
         difference = dt.datetime.now() - start
+        #raw_input()#use to pause your program, then you are able to open a broswer and type in http://localhost:4040/
         dataframeoutput.unpersist()
         sparkSession.stop()
         print 'Done, total running time for ' + inputType +' data source is :'
+
         return difference
 
 if __name__ == "__main__":
@@ -208,16 +228,18 @@ if __name__ == "__main__":
     s3bucket = "output-alu-new" # your s3bucket name
     s3Files = s3fs.S3FileSystem(anon=False).ls(s3bucket)
     localFiles = glob.glob(intDirectory + '*.csv')
-    # Pls first set up DNS in local environment's /etc/hosts     XXX.XXX.XXX hdfs1
-    hdfsFiles = hdfs.Client('http://hdfs1:50070').list('/user/ec2-user/sample-data') # Use namenode public ip http://namenode:50070
     #(1) run via pandas
     print ALU_LTE_PANDAS().run("local", localFiles, outDirectory)
     print ALU_LTE_PANDAS().run("s3", s3Files, outDirectory)
     #(2) run via spark
     print ALU_LTE_SPARK().run("local", localFiles, outDirectory)
     print ALU_LTE_SPARK().run("s3", s3Files, outDirectory)
-    print ALU_LTE_SPARK().run("hdfs", hdfsFiles, outDirectory)
-    exit()
+    # Pls first set up DNS in local environment's /etc/hosts     XXX.XXX.XXX hdfs1
+    try:
+        hdfsFiles = hdfs.Client('http://hdfs1:50070').list('/user/ec2-user/sample-data') # Use namenode public ip http://namenode:50070
+        print ALU_LTE_SPARK().run("hdfs", hdfsFiles, outDirectory)
+    except Exception as e:
+        logger.warn('Failed to fetch hdfs directory!')
     # if you already update your local aws credentials by vi ~/.aws/credentials
     # then you don't need to explicitly set the access_key, secret_key
     # otherwise, we have to set aws credentials at runtime
